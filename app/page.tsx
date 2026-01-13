@@ -28,6 +28,7 @@ interface QuestionConfig {
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
+  const [patternFile, setPatternFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [latexContent, setLatexContent] = useState('');
@@ -39,6 +40,7 @@ export default function Home() {
   });
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const patternFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -48,6 +50,18 @@ export default function Home() {
         setError('');
       } else {
         setError('Please select a PDF file');
+      }
+    }
+  };
+
+  const handlePatternFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const selectedFile = e.target.files[0];
+      if (selectedFile.type === 'application/pdf') {
+        setPatternFile(selectedFile);
+        setError('');
+      } else {
+        setError('Please select a PDF file for the pattern');
       }
     }
   };
@@ -89,6 +103,9 @@ export default function Home() {
     try {
       const formData = new FormData();
       formData.append('file', file);
+      if (patternFile) {
+        formData.append('patternFile', patternFile);
+      }
       formData.append('subject', config.subject);
       config.questionTypes.forEach(type => {
         formData.append('questionTypes', type);
@@ -216,8 +233,53 @@ export default function Home() {
         {/* Upload Section */}
         <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl p-4 sm:p-6 md:p-8 mb-6 sm:mb-8">
           <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-gray-800">
-            📤 Upload Your PDF Textbook
+            📤 Upload Your Files
           </h2>
+
+          {/* Pattern File Upload - Optional */}
+          <div className="mb-6 sm:mb-8">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-700">
+                📋 Question Paper Pattern (Optional)
+              </h3>
+              {patternFile && (
+                <button
+                  onClick={() => setPatternFile(null)}
+                  className="text-red-600 hover:text-red-700 text-sm font-medium"
+                >
+                  ✕ Remove
+                </button>
+              )}
+            </div>
+            <p className="text-xs sm:text-sm text-gray-600 mb-3">
+              Upload a sample question paper so AI can understand and replicate its format, structure, and style.
+            </p>
+            <div
+              className="border-2 border-dashed rounded-lg p-4 sm:p-6 text-center cursor-pointer transition-all border-purple-300 bg-purple-50 hover:bg-purple-100"
+              onClick={() => patternFileInputRef.current?.click()}
+            >
+              <div className="text-3xl sm:text-4xl mb-2">📋</div>
+              <div className="text-sm sm:text-base text-gray-700">
+                {patternFile ? (
+                  <span className="font-semibold text-purple-600">{patternFile.name}</span>
+                ) : (
+                  'Click to upload pattern (Optional)'
+                )}
+              </div>
+              <input
+                ref={patternFileInputRef}
+                type="file"
+                accept="application/pdf"
+                onChange={handlePatternFileChange}
+                className="hidden"
+              />
+            </div>
+          </div>
+
+          {/* Main Textbook Upload */}
+          <h3 className="text-base sm:text-lg font-semibold text-gray-700 mb-3">
+            📚 Textbook/Study Material (Required)
+          </h3>
 
           <div
             className={`border-3 sm:border-4 border-dashed rounded-lg sm:rounded-xl p-6 sm:p-12 text-center cursor-pointer transition-all ${

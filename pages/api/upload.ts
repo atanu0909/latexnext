@@ -41,7 +41,8 @@ async function extractTextFromPDF(filePath: string): Promise<string> {
 
 async function generateQuestionsWithGemini(
   pdfText: string,
-  metadata: PDFMetadata
+  metadata: PDFMetadata,
+  patternText?: string
 ): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -92,11 +93,16 @@ async function generateQuestionsWithGemini(
     ? `\n\nCUSTOM INSTRUCTIONS (HIGHEST PRIORITY):\n${metadata.customInstructions}\n\nPlease follow these custom instructions carefully as they take precedence over other settings.`
     : '';
 
+  const patternSection = patternText
+    ? `\n\nQUESTION PAPER PATTERN/FORMAT TO FOLLOW:\n${patternText}\n\nIMPORTANT: Carefully analyze the above question paper pattern. Pay attention to:\n- The overall structure and layout\n- Question numbering format\n- Section divisions (if any)\n- Mark distribution format\n- Question phrasing style\n- Instructions format\n- Any specific formatting conventions\n\nPlease generate questions that EXACTLY match this pattern and style.`
+    : '';
+
   const prompt = `
 You are an expert ${subject} educator. Based on the following educational content, generate comprehensive questions with solutions.
 
 Content:
 ${pdfText}
+${patternSection}
 
 Please generate high-quality ${subject} questions based on this content.${questionBreakdown}
 
@@ -216,7 +222,10 @@ export default async function handler(
         return res.status(400).json({ error: 'No file provided' });
       }
 
+      const patternFile = Array.isArray(files.patternFile) ? files.patternFile[0] : files.patternFile;
+
       const filePath = (file as File).filepath;
+      const patternFilePath = patternFile ? (patternFile as File).filepath : null;
 
       try {
         // Extract metadata
@@ -252,22 +261,39 @@ export default async function handler(
         const pdfText = await extractTextFromPDF(filePath);
 
         if (!pdfText.trim()) {
-          // Clean up uploaded file
+          // Clean up uploaded files
           if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
+          }
+          if (patternFilePath && fs.existsSync(patternFilePath)) {
+            fs.unlinkSync(patternFilePath);
           }
           return res.status(400).json({ error: 'Could not extract text from PDF' });
         }
 
+        // Extract pattern text if pattern file provided
+        let patternText: string | undefined;
+        if (patternFilePath) {
+          try {
+            patternText = await extractTextFromPDF(patternFilePath);
+          } catch (error) {
+            console.error('Error extracting pattern text:', error);
+            // Continue without pattern if extraction fails
+          }
+        }
+
         // Generate questions using Gemini
-        let latexContent = await generateQuestionsWithGemini(pdfText, metadata);
+        let latexContent = await generateQuestionsWithGemini(pdfText, metadata, patternText);
         
         // Strip markdown code fences if present
         latexContent = latexContent.replace(/^```(?:latex)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
 
-        // Clean up uploaded file
+        // Clean up uploaded files
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
+        }
+        if (patternFilePath && fs.existsSync(patternFilePath)) {
+          fs.unlinkSync(patternFilePath);
         }
 
         return res.status(200).json({
@@ -282,6 +308,13 @@ export default async function handler(
             fs.unlinkSync(filePath);
           } catch (cleanupError) {
             console.error('Cleanup error:', cleanupError);
+          }
+        }
+        if (patternFilePath && fs.existsSync(patternFilePath)) {
+          try {
+            fs.unlinkSync(patternFilePath);
+          } catch (cleanupError) {
+            console.error('Pattern cleanup error:', cleanupError);
           }
         }
         return res.status(500).json({ error: error.message || 'Failed to process PDF' });
